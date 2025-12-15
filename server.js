@@ -1,59 +1,130 @@
-// server.js
+// server.js (PostgreSQL Version)
 
 const express = require('express');
-const bodyParser = require('body-parser');
-const fs = require('fs');
 const path = require('path');
+const cors = require('cors');
+const { Pool } = require('pg'); // Import PostgreSQL Pool
 
 const app = express();
-const PORT = 3000;
-// Define the path to your data file
-const DATA_FILE = path.join(__dirname, 'data', 'questions.json');
+const PORT = process.env.PORT || 3000;
 
-// Middleware Setup
-// Use body-parser to parse incoming JSON request bodies
-app.use(bodyParser.json()); 
+// -----------------------------------------------------------
+// 1. POSTGRESQL CONFIGURATION
+// -----------------------------------------------------------
 
-// Serve static files (like index.html) from the root directory
+// Uses the standard environment variable for PostgreSQL connection
+const DATABASE_URL = process.env.DATABASE_URL || 'postgres://user:password@localhost:5432/quizdb'; 
+
+const pool = new Pool({
+    connectionString: DATABASE_URL,
+});
+
+// Function to initialize the database table
+async function initializeDb() {
+    try {
+        const client = await pool.connect();
+        // Uses IF NOT EXISTS to prevent errors if the table already exists
+        const createTableQuery = `
+            CREATE TABLE IF NOT EXISTS quiz_questions (
+                id SERIAL PRIMARY KEY,
+                question_data JSONB NOT NULL
+            );
+        `;
+        await client.query(createTableQuery);
+        client.release();
+        console.log('✅ PostgreSQL "quiz_questions" table ready.');
+    } catch (err) {
+        console.error('❌ PostgreSQL connection or table creation error:', err.message);
+    }
+}
+
+// Immediately initialize the database when the server starts
+initializeDb();
+
+
+// -----------------------------------------------------------
+// 2. MIDDLEWARE
+// -----------------------------------------------------------
+
+app.use(cors()); 
+app.use(express.json()); 
+
+
+// -----------------------------------------------------------
+// 3. STATIC FILES
+// -----------------------------------------------------------
+
 app.use(express.static(path.join(__dirname))); 
 
-// --- API Endpoints ---
-
-// 1. Load Questions (GET) - Retrieves data from the JSON file
-app.get('/api/questions/load', (req, res) => {
-    fs.readFile(DATA_FILE, 'utf8', (err, data) => {
-        if (err) {
-            // If the file doesn't exist (first run) or is unreadable, send an empty array.
-            console.error("Error reading data file. Sending empty array to client. (This is normal on the first run).", err.code);
-            return res.json([]);
-        }
-        try {
-            const questions = JSON.parse(data);
-            res.json(questions);
-        } catch (parseError) {
-            console.error("Error parsing JSON data file. Sending empty array.", parseError);
-            res.json([]);
-        }
-    });
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, 'index.html'));
 });
 
-// 2. Save Questions (POST) - Writes the entire question array to the JSON file
-app.post('/api/questions/save', (req, res) => {
-    const questions = req.body; // The array of questions sent from the client
-    
-    // Write the data back to the file with a nice 4-space indentation
-    fs.writeFile(DATA_FILE, JSON.stringify(questions, null, 4), 'utf8', (err) => {
-        if (err) {
-            console.error("Error writing data file.", err);
-            return res.status(500).json({ success: false, message: 'Failed to save data to server.' });
-        }
-        res.json({ success: true, message: 'Data saved permanently to questions.json.' });
-        console.log(`Data successfully saved to ${DATA_FILE}`);
-    });
+
+// -----------------------------------------------------------
+// 4. API ROUTES (MIGRATED TO USE POSTGRESQL)
+// -----------------------------------------------------------
+
+// Load all questions from the database
+app.get('/api/questions/load', async (req, res) => {
+    try {
+        // SELECT only the JSONB data column
+        const result = await pool.query('SELECT question_data FROM quiz_questions ORDER BY id'); 
+        
+        // Extract the JSONB object from each row
+        const questions = result.rows.map(row => row.question_data); 
+        
+        console.log(`Loaded ${questions.length} questions from PostgreSQL.`);
+        res.json(questions);
+    } catch (error) {
+        console.error('Error loading questions from DB:', error);
+        res.status(500).json([]); 
+    }
 });
 
-// --- Server Start ---
+// Save (overwrite) all questions in the database
+app.post('/api/questions/save', async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const questions = req.body;
+
+        // Start a transaction for atomic operation (all or nothing)
+        await client.query('BEGIN'); 
+
+        // 1. Clear the entire table
+        await client.query('TRUNCATE quiz_questions RESTART IDENTITY;'); 
+
+        // 2. Insert the new array of questions
+        if (questions.length > 0) {
+            // Prepare values for bulk insert using array mapping
+            const values = questions.map(q => [q]); // Wrap each question object in an array for parameterized query
+            
+            // Build the multi-row INSERT query dynamically
+            const insertQuery = `INSERT INTO quiz_questions (question_data) VALUES ${questions.map((_, i) => `($${i + 1}::jsonb)`).join(', ')}`;
+            
+            // Execute the insert query with the flattened list of JSON objects
+            await client.query(insertQuery, values.flat());
+        }
+        
+        await client.query('COMMIT'); // Commit the changes
+        
+        console.log(`Saved ${questions.length} questions to PostgreSQL.`);
+        res.json({ message: `Questions saved successfully to PostgreSQL. Total: ${questions.length}` });
+
+    } catch (error) {
+        await client.query('ROLLBACK'); // Revert changes on error
+        console.error('Error saving questions to DB:', error);
+        res.status(500).json({ error: 'Failed to save data to database.' });
+    } finally {
+        client.release(); // Release the client back to the pool
+    }
+});
+
+
+// -----------------------------------------------------------
+// 5. SERVER START
+// -----------------------------------------------------------
+
 app.listen(PORT, () => {
     console.log(`Server running at http://localhost:${PORT}`);
-    console.log("Use Ctrl+C to stop the server.");
 });
