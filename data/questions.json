@@ -28,5 +28,18 @@
         "explanation": "The descendant selector (space) targets elements inside another element.",
         "category": "Deputy Director",
         "subcategory": "2024"
+    },
+    {
+        "question": "What is photosynthesis",
+        "type": "true_false",
+        "explanation": "this is a test",
+        "category": "Deputy Director",
+        "subcategory": "2024",
+        "timeLimit": 15,
+        "options": [
+            "True",
+            "False"
+        ],
+        "answer": "True"
     }
 ]
