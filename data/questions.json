@@ -1,0 +1,32 @@
+[
+    {
+        "question": "What is data?",
+        "type": "fill_in_the_blank",
+        "explanation": "CSS stands for Cascading Style Sheets.",
+        "category": "Deputy Director",
+        "subcategory": "2024",
+        "options": [],
+        "answer": "Data is a raw fact"
+    },
+    {
+        "question": "The mouse is an input device",
+        "type": "true_false",
+        "explanation": "Yes the mouse is an input device",
+        "category": "Deputy Director",
+        "subcategory": "2024",
+        "timeLimit": 15,
+        "options": [
+            "True",
+            "False"
+        ],
+        "answer": "True"
+    },
+    {
+        "question": "What is the CSS selector used to target all `<p>` elements inside a `<div>`?",
+        "type": "fill_in_the_blank",
+        "answer": "div p",
+        "explanation": "The descendant selector (space) targets elements inside another element.",
+        "category": "Deputy Director",
+        "subcategory": "2024"
+    }
+]
