@@ -567,7 +567,7 @@
         async function loadAllQuestions() { 
             try {
                 // Fetch data from the new Express endpoint
-                const response = await fetch('http://localhost:3000/api/questions/load'); 
+                const response = await fetch('/api/questions/load'); // <--- Using relative path
                 if (!response.ok) throw new Error('Failed to load questions from server.');
                 
                 const remoteQuestions = await response.json();
